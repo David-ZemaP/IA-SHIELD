@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IA-Seguridad</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <span class="logo-icon">🛡️</span>
+        <span class="logo-text">IA-Seguridad</span>
+      </div>
+      <div class="user-info" id="userInfo" style="display:none;">
+        <span id="userEmail"></span>
+        <button id="logoutBtn" class="btn-logout">✕</button>
+      </div>
+    </header>
+
+    <!-- Login section -->
+    <div id="loginSection" class="section">
+      <div class="login-prompt">
+        <p>Protegé tus emails contra phishing con IA</p>
+        <button id="loginBtn" class="btn-primary">Conectar con Gmail</button>
+      </div>
+    </div>
+
+    <!-- Main content (emails) -->
+    <div id="mainSection" class="section" style="display:none;">
+      <!-- Stats bar -->
+      <div class="stats-bar">
+        <div class="stat-item safe">
+          <span class="stat-num" id="safeCount">0</span>
+          <span class="stat-label">Seguros</span>
+        </div>
+        <div class="stat-item suspicious">
+          <span class="stat-num" id="suspiciousCount">0</span>
+          <span class="stat-label">Sospechosos</span>
+        </div>
+        <div class="stat-item phishing">
+          <span class="stat-num" id="phishingCount">0</span>
+          <span class="stat-label">Phishing</span>
+        </div>
+      </div>
+
+      <!-- Email list -->
+      <div class="email-list" id="emailList">
+        <div class="loading">Cargando emails...</div>
+      </div>
+
+      <!-- Refresh button -->
+      <button id="refreshBtn" class="btn-secondary">↻ Actualizar</button>
+    </div>
+
+    <!-- Error -->
+    <div id="errorSection" class="section error-section" style="display:none;">
+      <p id="errorMessage"></p>
+      <button id="retryBtn" class="btn-secondary">Reintentar</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

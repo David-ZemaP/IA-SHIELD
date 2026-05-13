@@ -1,0 +1,47 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: ia-seguridad-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=http://localhost:8000/auth/gmail/callback
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SAFE_BROWSING_API_KEY=${SAFE_BROWSING_API_KEY}
+      - MCP_SERVER_URL=http://mcp-server:9000
+      - EXTENSION_PATH=/app/extension
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8000
+    volumes:
+      # Mount extension for auth callback serve
+      - ./extension:/app/extension:ro
+    depends_on:
+      - mcp-server
+    networks:
+      - ia-seguridad-net
+    restart: unless-stopped
+
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    container_name: ia-seguridad-mcp
+    ports:
+      - "9001:9000"
+    environment:
+      - SAFE_BROWSING_API_KEY=${SAFE_BROWSING_API_KEY}
+      - MCP_SERVER_HOST=0.0.0.0
+      - MCP_SERVER_PORT=9000
+    networks:
+      - ia-seguridad-net
+    restart: unless-stopped
+
+networks:
+  ia-seguridad-net:
+    driver: bridge

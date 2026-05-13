@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IA-Seguridad — Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f23; color: #e0e0e0; min-height: 100vh; }
+
+    .dashboard {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 32px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #2d2d5a;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .status-badge {
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status-badge.live {
+      background: rgba(40, 167, 69, 0.2);
+      color: #28a745;
+      border: 1px solid #28a745;
+    }
+
+    /* Cards grid */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .card {
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid #2d2d5a;
+      transition: transform 0.2s;
+    }
+
+    .card:hover { transform: translateY(-2px); }
+
+    .card-label {
+      font-size: 12px;
+      color: #8b8ba7;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .card-value {
+      font-size: 36px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .card-value.safe { color: #28a745; }
+    .card-value.suspicious { color: #ffc107; }
+    .card-value.phishing { color: #dc3545; }
+    .card-value.neutral { color: #667eea; }
+
+    .card-sub { font-size: 12px; color: #6c757d; }
+
+    /* Charts section */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-bottom: 32px;
+    }
+
+    .chart-card {
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      border-radius: 12px;
+      padding: 24px;
+      border: 1px solid #2d2d5a;
+    }
+
+    .chart-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: #e0e0e0;
+    }
+
+    /* Bar chart */
+    .bar-chart { display: flex; gap: 12px; align-items: flex-end; height: 120px; }
+    .bar-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .bar { width: 100%; border-radius: 4px 4px 0 0; transition: height 0.5s ease; min-height: 4px; }
+    .bar.safe { background: linear-gradient(180deg, #28a745, #1e7e34); }
+    .bar.suspicious { background: linear-gradient(180deg, #ffc107, #d39e00); }
+    .bar.phishing { background: linear-gradient(180deg, #dc3545, #a71d2a); }
+    .bar-label { font-size: 11px; color: #8b8ba7; text-align: center; }
+    .bar-value { font-size: 12px; font-weight: 600; }
+
+    /* History table */
+    .history-table-container {
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      border-radius: 12px;
+      border: 1px solid #2d2d5a;
+      overflow: hidden;
+    }
+
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      border-bottom: 1px solid #2d2d5a;
+    }
+
+    .history-header h2 { font-size: 16px; }
+
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .history-table th {
+      text-align: left;
+      padding: 12px 24px;
+      font-size: 11px;
+      color: #8b8ba7;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border-bottom: 1px solid #2d2d5a;
+    }
+
+    .history-table td {
+      padding: 12px 24px;
+      font-size: 13px;
+      border-bottom: 1px solid #1a1a2e;
+    }
+
+    .history-table tr:last-child td { border-bottom: none; }
+    .history-table tr:hover { background: rgba(102, 126, 234, 0.05); }
+
+    .verdict-tag {
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      display: inline-block;
+    }
+
+    .verdict-tag.safe { background: rgba(40, 167, 69, 0.2); color: #28a745; }
+    .verdict-tag.suspicious { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
+    .verdict-tag.phishing { background: rgba(220, 53, 69, 0.2); color: #dc3545; }
+    .verdict-tag.review_needed { background: rgba(108, 117, 125, 0.2); color: #6c757d; }
+
+    .confidence-cell { color: #8b8ba7; }
+
+    .url-threat {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: #dc3545;
+      font-size: 11px;
+    }
+
+    .refresh-btn {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #6c757d;
+    }
+
+    .loading { text-align: center; padding: 40px; color: #667eea; }
+
+    @media (max-width: 768px) {
+      .charts-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard">
+    <div class="header">
+      <h1>🛡️ IA-Seguridad Dashboard</h1>
+      <span class="status-badge live">● Sistema activo</span>
+    </div>
+
+    <!-- Stats cards -->
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-label">Total Analizados</div>
+        <div class="card-value neutral" id="total-analyzed">0</div>
+        <div class="card-sub">emails procesados</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Phishing Detectado</div>
+        <div class="card-value phishing" id="total-phishing">0</div>
+        <div class="card-sub" id="phishing-rate">0% del total</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Sospechosos</div>
+        <div class="card-value suspicious" id="total-suspicious">0</div>
+        <div class="card-sub">requieren atención</div>
+      </div>
+      <div class="card">
+        <div class="card-label">URLs Maliciosas</div>
+        <div class="card-value phishing" id="total-malicious-urls">0</div>
+        <div class="card-sub" id="urls-checked">0 verificadas</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Tasa de Detección</div>
+        <div class="card-value safe" id="detection-rate">0%</div>
+        <div class="card-sub">precisión del modelo</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Falsos Positivos</div>
+        <div class="card-value neutral" id="false-positives">0</div>
+        <div class="card-sub">reportados por usuarios</div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-row">
+      <div class="chart-card">
+        <div class="chart-title">Distribución de Veredictos</div>
+        <div class="bar-chart" id="bar-chart">
+          <div class="bar-item">
+            <div class="bar safe" id="bar-safe" style="height: 0px"></div>
+            <div class="bar-value" id="bar-safe-val">0</div>
+            <div class="bar-label">Seguros</div>
+          </div>
+          <div class="bar-item">
+            <div class="bar suspicious" id="bar-suspicious" style="height: 0px"></div>
+            <div class="bar-value" id="bar-suspicious-val">0</div>
+            <div class="bar-label">Sospechosos</div>
+          </div>
+          <div class="bar-item">
+            <div class="bar phishing" id="bar-phishing" style="height: 0px"></div>
+            <div class="bar-value" id="bar-phishing-val">0</div>
+            <div class="bar-label">Phishing</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-title">Últimos 10 Análisis</div>
+        <div id="mini-history" style="display:flex;flex-direction:column;gap:6px;">
+          <div class="loading">Cargando...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- History table -->
+    <div class="history-table-container">
+      <div class="history-header">
+        <h2>Historial de Análisis</h2>
+        <button class="refresh-btn" onclick="loadData()">↻ Actualizar</button>
+      </div>
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Hora</th>
+            <th>Email ID</th>
+            <th>Veredicto</th>
+            <th>Confianza</th>
+            <th>URLs Analizadas</th>
+            <th>Indicadores</th>
+          </tr>
+        </thead>
+        <tbody id="history-body">
+          <tr><td colspan="6"><div class="loading">Cargando historial...</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:8000';
+
+    async function loadData() {
+      try {
+        const [statsResp, historyResp] = await Promise.all([
+          fetch(`${API_BASE}/dashboard/stats`),
+          fetch(`${API_BASE}/dashboard/history?limit=50`)
+        ]);
+
+        const stats = await statsResp.json();
+        const history = await historyResp.json();
+
+        updateStats(stats);
+        updateHistory(history.items || []);
+        updateBarChart(stats);
+        updateMiniHistory(history.items || []);
+      } catch (e) {
+        console.error('Error loading dashboard:', e);
+      }
+    }
+
+    function updateStats(s) {
+      document.getElementById('total-analyzed').textContent = s.total_analyzed;
+      document.getElementById('total-phishing').textContent = s.total_phishing;
+      document.getElementById('total-suspicious').textContent = s.total_suspicious;
+      document.getElementById('total-malicious-urls').textContent = s.total_malicious_urls;
+      document.getElementById('detection-rate').textContent = s.detection_rate + '%';
+      document.getElementById('false-positives').textContent = s.false_positives_reported;
+      document.getElementById('phishing-rate').textContent = s.phishing_rate + '% del total';
+      document.getElementById('urls-checked').textContent = s.total_urls_checked + ' verificadas';
+    }
+
+    function updateHistory(items) {
+      const tbody = document.getElementById('history-body');
+
+      if (!items || items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No hay análisis registrados aún. Usá la extensión para analizar emails.</div></td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = items.map(item => {
+        const indicators = item.indicators || [];
+        const urls = item.urls_analyzed || [];
+        const maliciousUrls = urls.filter(u => u.malicious);
+        const time = new Date(item.analyzed_at).toLocaleTimeString('es-AR');
+
+        return `
+          <tr>
+            <td>${time}</td>
+            <td style="font-family:monospace;font-size:11px;color:#8b8ba7;">${(item.email_id || 'N/A').substring(0, 12)}...</td>
+            <td><span class="verdict-tag ${item.verdict}">${getVerdictLabel(item.verdict)}</span></td>
+            <td class="confidence-cell">${item.confidence > 0 ? (item.confidence * 100).toFixed(0) + '%' : 'N/A'}</td>
+            <td>
+              ${urls.length > 0 ? urls.length + ' verificada(s)' : 'Sin URLs'}
+              ${maliciousUrls.length > 0 ? `<br><span class="url-threat">⚠️ ${maliciousUrls.length} maliciosa(s)</span>` : ''}
+            </td>
+            <td style="font-size:11px;color:#6c757d;">${indicators.slice(0, 2).join(', ')}${indicators.length > 2 ? '...' : ''}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function updateBarChart(stats) {
+      const total = stats.total_safe + stats.total_suspicious + stats.total_phishing || 1;
+      const maxHeight = 100; // pixels
+
+      function setBar(id, count, labelClass) {
+        const pct = (count / total) * maxHeight;
+        document.getElementById(id).style.height = pct + 'px';
+        document.getElementById(id.replace('bar-', 'bar-') + '-val').textContent = count;
+      }
+
+      setBar('bar-safe', stats.total_safe);
+      setBar('bar-suspicious', stats.total_suspicious);
+      setBar('bar-phishing', stats.total_phishing);
+
+      // Fix the val elements
+      document.getElementById('bar-safe-val').textContent = stats.total_safe;
+      document.getElementById('bar-suspicious-val').textContent = stats.total_suspicious;
+      document.getElementById('bar-phishing-val').textContent = stats.total_phishing;
+    }
+
+    function updateMiniHistory(items) {
+      const container = document.getElementById('mini-history');
+      const last10 = (items || []).slice(0, 10);
+
+      if (last10.length === 0) {
+        container.innerHTML = '<div class="empty-state">Sin análisis aún</div>';
+        return;
+      }
+
+      container.innerHTML = last10.map(item => `
+        <div style="display:flex;align-items:center;gap:12px;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;">
+          <span class="verdict-tag ${item.verdict}" style="flex-shrink:0;">${getShortLabel(item.verdict)}</span>
+          <span style="flex:1;font-size:11px;color:#8b8ba7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(item.email_id || '').substring(0, 16)}...</span>
+          <span style="font-size:11px;color:#6c757d;">${item.confidence > 0 ? (item.confidence*100).toFixed(0)+'%' : ''}</span>
+        </div>
+      `).join('');
+    }
+
+    function getVerdictLabel(v) {
+      return {safe:'✓ Seguro', suspicious:'⚠ Sospechoso', phishing:'✕ Phishing', review_needed:'? Revisar'}[v] || v;
+    }
+
+    function getShortLabel(v) {
+      return {safe:'✓', suspicious:'⚠', phishing:'✕', review_needed:'?'}[v] || '?';
+    }
+
+    // Load on start and every 30 seconds
+    loadData();
+    setInterval(loadData, 30000);
+  </script>
+</body>
+</html>
