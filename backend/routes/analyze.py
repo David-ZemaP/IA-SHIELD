@@ -7,12 +7,13 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 
 from services.gemini_service import analyze_email, check_url_safety
 from services.gmail_service import get_email_detail
 from routes.dashboard import record_analysis
+from middleware.rate_limiter import limiter
 
 router = APIRouter(tags=["analyze"])
 
@@ -73,8 +74,10 @@ def extract_urls(text: str, max_urls: int = 10) -> list[str]:
 
 
 @router.post("", response_model=AnalyzeResponse)
+@limiter.limit("10/minute")
 async def analyze_email_endpoint(
-    request: AnalyzeRequest,
+    request: Request,
+    analyze_request: AnalyzeRequest,
     session_id: Optional[str] = Header(default=None, alias="X-Session-ID")
 ):
     """
@@ -85,7 +88,7 @@ async def analyze_email_endpoint(
     """
     # Always extract and check URLs first (local rules — always work)
     # Include subject + sender in the check too (even if no body)
-    urls = re.findall(r'https?://[^\s<>"{}|\\^`\[\]]+', request.email_body or request.email_subject or '')
+    urls = re.findall(r'https?://[^\s<>"{}|\\^`\[\]]+', analyze_request.email_body or analyze_request.email_subject or '')
     url_results = [check_url_safety(u) for u in urls[:20]]
     local_red_flags = []
     for r in url_results:
@@ -95,9 +98,9 @@ async def analyze_email_endpoint(
     analysis_result = None
     try:
         analysis_result = analyze_email(
-            email_content=request.email_body,
-            sender=request.email_sender,
-            subject=request.email_subject
+            email_content=analyze_request.email_body,
+            sender=analyze_request.email_sender,
+            subject=analyze_request.email_subject
         )
     except Exception:
         # Gemini failed — will use local rules below
@@ -161,7 +164,7 @@ async def analyze_email_endpoint(
         ))
 
     response = AnalyzeResponse(
-        email_id=request.email_id,
+        email_id=analyze_request.email_id,
         verdict=analysis_result["verdict"],
         confidence=analysis_result["confidence"],
         reason=analysis_result.get("reason") or analysis_result.get("reason", ""),

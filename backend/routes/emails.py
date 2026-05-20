@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request, HTTPException
 
 from services.gmail_service import get_emails_list, get_email_detail
 from models.schemas import EmailListResponse, EmailDetail
+from middleware.rate_limiter import limiter
 
 router = APIRouter()
 
@@ -29,6 +30,7 @@ def parse_from_header(from_header: str) -> tuple[Optional[str], Optional[str]]:
 
 
 @router.get("", response_model=EmailListResponse)
+@limiter.limit("10/minute")
 async def list_emails(request: Request, max_results: int = 20):
     """Lista los emails del inbox."""
     from routes.auth import require_auth
@@ -52,6 +54,7 @@ async def list_emails(request: Request, max_results: int = 20):
 
 
 @router.get("/{email_id}", response_model=EmailDetail)
+@limiter.limit("10/minute")
 async def get_email(request: Request, email_id: str):
     """Detalle de un email específico."""
     from routes.auth import require_auth

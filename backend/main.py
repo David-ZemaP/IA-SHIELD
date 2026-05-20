@@ -11,6 +11,8 @@ from routes import auth, analyze
 from routes.emails import router as emails_router
 from routes.dashboard import router as dashboard_router
 from routes.mcp import router as mcp_router
+from middleware.cors_validation import CORSValidationMiddleware
+from middleware.rate_limiter import limiter
 
 # Configure logging
 logging.basicConfig(level=logging.WARNING, format='%(message)s')
@@ -39,6 +41,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# CORS validation middleware for extension ID validation
+app.add_middleware(CORSValidationMiddleware)
+
+# Add rate limiter to app state
+app.state.limiter = limiter
 
 # Include routers — paths sin /api redundante
 app.include_router(auth.router, prefix="/auth", tags=["auth"])

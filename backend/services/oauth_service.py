@@ -4,6 +4,46 @@ import hashlib
 import httpx
 from typing import Optional
 from config import get_settings
+from services.encryption import encrypt_token, decrypt_token, generate_key
+
+
+def _get_encryption_key() -> str:
+    """Get encryption key from config or generate a new one."""
+    settings = get_settings()
+    key = settings.TOKEN_ENCRYPTION_KEY
+    if not key:
+        key = generate_key()
+    return key
+
+
+def encrypt_tokens_for_extension(token_data: dict) -> dict:
+    """Encrypt tokens for extension storage. Returns copy with encrypted tokens."""
+    key = _get_encryption_key()
+    encrypted = dict(token_data)
+
+    if "access_token" in encrypted:
+        encrypted["access_token"] = encrypt_token(encrypted["access_token"], key)
+    if "refresh_token" in encrypted and encrypted["refresh_token"]:
+        encrypted["refresh_token"] = encrypt_token(encrypted["refresh_token"], key)
+
+    encrypted["_encryption_key"] = key
+    return encrypted
+
+
+def decrypt_tokens_from_extension(token_data: dict, key: str) -> dict:
+    """Decrypt tokens from extension storage. Returns copy with decrypted tokens."""
+    decrypted = dict(token_data)
+
+    if "access_token" in decrypted:
+        decoded = decrypt_token(decrypted["access_token"], key)
+        if decoded:
+            decrypted["access_token"] = decoded
+    if "refresh_token" in decrypted and decrypted["refresh_token"]:
+        decoded = decrypt_token(decrypted["refresh_token"], key)
+        if decoded:
+            decrypted["refresh_token"] = decoded
+
+    return decrypted
 
 
 def generate_pkce_pair() -> tuple[str, str]:
@@ -67,7 +107,8 @@ async def exchange_code_for_tokens(code: str, code_verifier: str) -> dict:
         if response.status_code != 200:
             raise Exception(f"Token exchange failed: {response.text}")
 
-        return response.json()
+        token_data = response.json()
+        return token_data
 
 
 async def refresh_access_token(refresh_token: str) -> dict:

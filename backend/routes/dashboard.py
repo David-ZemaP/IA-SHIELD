@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from collections import defaultdict
 import uuid
 
-router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+router = APIRouter(tags=["dashboard"])
 
 # In-memory storage (prototype)
 # Estructura: {analysis_id: AnalysisRecord}

@@ -116,6 +116,7 @@
     <div class="buttons">
       <button class="btn-primary" onclick="goBack()">⬅️ Volver al correo</button>
       <button class="btn-secondary" onclick="reportFalsePositive()">⚠️ Reportar falso positivo</button>
+      <button class="btn-warning" style="background:#ffc107;color:#000;" onclick="proceedAnyway()">⚡ Entiendo, continuar</button>
     </div>
   </div>
 
@@ -142,6 +143,15 @@
 
         alert('Dominio removido de la lista de bloqueados. Por favor reporta este falso positivo en el dashboard.');
       });
+    }
+
+    function proceedAnyway() {
+      const url = params.get('url');
+      if (url) {
+        if (confirm('¿Estás seguro? Esta URL fue marcada como sospechosa. Continuarás bajo tu propio riesgo.')) {
+          window.location.href = url;
+        }
+      }
     }
   </script>
 </body>

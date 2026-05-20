@@ -1,299 +1,285 @@
-# IA-Seguridad — Phishing Detection Extension
+# 🛡️ IA-Shield — Detección de Phishing con Gemini + Chrome Extension
 
-Prototipo de extensión Chrome (MV3) + backend FastAPI para detección proactiva de phishing en Gmail usando Gemini AI + MCP (Model Context Protocol).
+**IA-Shield** es un sistema de detección proactiva de phishing en Gmail que combina:
 
----
-
-## Arquitectura
-
-```
-┌─────────────────────────────────────────────────────────┐
-│              CHROME EXTENSION (MV3)                     │
-│  ┌─────────┐  ┌──────────┐  ┌───────────────────┐     │
-│  │ Service │  │  Popup   │  │  Auth Callback    │     │
-│  │ Worker  │  │   UI     │  │  (OAuth flow)     │     │
-│  └────┬────┘  └────┬─────┘  └─────────┬─────────┘     │
-│       │            │                  │                │
-│       └────────────┴──────────────────┘                │
-│                    │                                   │
-│                    ▼ HTTP + Cookie                     │
-│         ┌─────────────────────────┐                   │
-│         │     BACKEND FastAPI      │                   │
-│         │  ┌───────────────────┐  │                   │
-│         │  │  /auth  — OAuth   │  │                   │
-│         │  │  /emails — Gmail  │  │                   │
-│         │  │  /analyze — IA   │  │                   │
-│         │  │  /dashboard — Stats│                  │
-│         │  └─────────┬─────────┘  │                   │
-│         │            │            │                   │
-│         │   ┌────────┴───────┐    │                   │
-│         │   │  Gemini 1.5   │    │                   │
-│         │   │  Flash (IA)   │    │                   │
-│         │   └────────┬───────┘    │                   │
-│         │            │            │                   │
-│         │   ┌────────▼───────┐   │                   │
-│         │   │  MCP Server    │   │                   │
-│         │   │  Safe Browsing │   │                   │
-│         │   └────────────────┘   │                   │
-│         └─────────────────────────┘                   │
-└─────────────────────────────────────────────────────────┘
-```
+- **Gemini 2.5 Flash** (IA generativa) para análisis semántico de correos
+- **MCP (Model Context Protocol)** para verificación de URLs en tiempo real
+- **Chrome Extension MV3** con análisis automático cada 60s
+- **Detección de homoglyphs** (paypa1 → paypal) por distancia de Levenshtein
 
 ---
 
-## Setup Rápido (Día 1)
+## 🔥 Lo más interesante del proyecto
 
-### 1. Credenciales GCP
+### 1. Análisis dual con Gemini + detección local
 
-Necesitás crear un proyecto en [Google Cloud Console](https://console.cloud.google.com) y habilitar:
+No depende únicamente de la IA. Si Gemini falla (timeout, cuota), el sistema cae a un análisis local con reglas heurísticas. Esto asegura que **nunca** se quede sin responder.
 
-- **Gmail API** (`gmail.googleapis.com`)
-- **Safe Browsing API** (opcional, para verificación de URLs)
+### 2. Rate limiting inteligente (10 req/min)
 
-Luego crear un **OAuth 2.0 Client ID** (tipo "Web application") y copiar el Client ID y Secret.
+El backend limita el análisis a 10 requests por minuto vía slowapi, protegiendo tanto al backend como a la cuota de Gemini. Si se excede, responde `429 Too Many Requests`.
 
-### 2. API Keys
+### 3. Homoglyph detection con Levenshtein
 
-- **GEMINI_API_KEY**: Obtener de [Google AI Studio](https://aistudio.google.com/app/apikey)
-- **SAFE_BROWSING_API_KEY**: En GCP Console → APIs y Servicios → Safe Browsing API → Credenciales
+Detecta URLs que suplantan dominios conocidos usando distancia de edición. `paypa1.com` → similitud 83% con `paypal`. `go0gle.com` → similitud 83% con `google`.
 
-### 3. Variables de Entorno
+### 4. Encriptación AES-256-GCM de tokens
+
+Los tokens OAuth se encriptan con Fernet antes de almacenarse en `chrome.storage`. El backend expone funciones dedicadas para encriptar/desencriptar en el borde entre backend y extensión.
+
+### 5. Análisis 100% automático
+
+La extensión analiza emails nuevos automáticamente:
+- Al cargar la extensión
+- Cada 60 segundos (vía `chrome.alarms`)
+- Con badge que muestra el conteo de amenazas
+- Con notificaciones push de Chrome si detecta phishing con confianza > 80%
+
+---
+
+## 🧠 Cómo se aplica Gemini
+
+```
+Email nuevo
+    │
+    ▼
+[1] Extracción de texto (subject + body + sender + metadatos)
+    │
+    ▼
+[2] Se envía a Gemini 2.5 Flash via API v1beta
+    ├─ Prompt: "Analiza este email para detectar phishing..."
+    ├─ Contexto: 10+ patrones de phishing conocidos
+    └─ Safety: Instrucciones de evitar falsos positivos
+    │
+    ▼
+[3] Gemini devuelve JSON con:
+    ├─ verdict: "safe" | "suspicious" | "phishing"
+    ├─ confidence: 0.0 - 1.0
+    ├─ reason: explicación en español
+    └─ indicators: lista de banderas rojas
+    │
+    ▼
+[4] Se combina con:
+    ├─ Análisis local de URLs (Safe Browsing + patrones)
+    ├─ Detección de homoglyphs en URLs
+    └─ Reglas heurísticas (TLDs sospechosos, hosting acortadores)
+    │
+    ▼
+[5] Verdeto final + notificación si es necesario
+```
+
+**Gemini usa el modelo `gemini-2.5-flash`** con la API `v1beta` (no v1) para mejor rendimiento en clasificación de texto. El prompt está en español y pide explícitamente que **no invente** si no está segura.
+
+---
+
+## 🔌 Cómo se aplica MCP (Model Context Protocol)
+
+MCP es el protocolo estándar para que los LLMs interactúen con herramientas externas. En IA-Shield:
+
+```
+┌──────────────┐      POST /mcp/verify       ┌─────────────────────┐
+│  Backend     │ ──────────────────────────►  │   MCP Server        │
+│  FastAPI     │                              │   (JSON-RPC over    │
+│  /analyze    │ ◄──────────────────────────  │    HTTP)            │
+│              │      {url, malicious, ...}    │                     │
+└──────────────┘                              │  tools/             │
+                                              │   safebrowsing.py   │
+                                              │   └── Safe Browsing │
+                                              │       API de Google │
+                                              └─────────────────────┘
+```
+
+El MCP Server:
+- Corre como servicio separado en Docker (`mcp-server:9000`)
+- Expone el endpoint `/tools/verify-url` usando JSON-RPC sobre HTTP
+- Verifica URLs contra la **Google Safe Browsing API**
+- **No bloquea** si falla — siempre devuelve un resultado seguro por defecto
+
+Si el MCP no responde, el análisis continúa sin URLs verificadas. Esto asegura **resiliencia total**.
+
+---
+
+## 📦 Stack técnico
+
+| Capa | Tecnología |
+|------|-----------|
+| **Frontend** | Chrome Extension MV3 (JavaScript vanilla) |
+| **Backend** | Python FastAPI (uvicorn) |
+| **IA** | Google Gemini 2.5 Flash |
+| **Protocolo** | MCP (Model Context Protocol) vía JSON-RPC |
+| **Seguridad** | OAuth 2.0 PKCE, AES-256-GCM (Fernet) |
+| **Rate limiting** | slowapi (10 req/min) |
+| **Testing** | pytest + pytest-asyncio |
+| **Infra** | Docker Compose (3 servicios) |
+
+---
+
+## 🚀 Paso a paso: Cómo se usa
+
+### 1. Requisitos
+
+- Docker Desktop (recomendado) o Python 3.11+
+- Google Chrome
+- Gmail account (para testear)
+
+### 2. Credenciales
+
+Necesitás 3 claves gratuitas:
+
+| Clave | Dónde obtenerla |
+|-------|----------------|
+| **Google OAuth Client ID** | [GCP Console](https://console.cloud.google.com/apis/credentials) → Crear OAuth 2.0 Web Application. Agregar redirect URI: `http://localhost:8000/auth/gmail/callback` |
+| **Gemini API Key** | [Google AI Studio](https://aistudio.google.com/app/apikey) |
+| **Safe Browsing API Key** | GCP Console → APIs → Safe Browsing API → Habilitar + Credenciales |
+
+### 3. Configurar `.env`
 
 ```bash
-# backend/.env (crear archivo)
+# Copiar y editar
 GOOGLE_CLIENT_ID=tu-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=tu-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:8000/auth/gmail/callback
 GEMINI_API_KEY=tu-gemini-api-key
 SAFE_BROWSING_API_KEY=tu-safebrowsing-key
-APP_HOST=0.0.0.0
-APP_PORT=8000
+GOOGLE_REDIRECT_URI=http://localhost:8000/auth/gmail/callback
+MCP_SERVER_URL=http://localhost:9001
 ```
 
-### 4. Instalar Dependencias
+### 4. Iniciar todo
 
 ```bash
-# Backend
-cd backend
-pip install -r requirements.txt
-
-# MCP Server
-cd mcp-server
-pip install -r requirements.txt
+docker compose up -d --build
 ```
 
-### 5. Ejecutar
+Esto levanta 3 servicios:
+- **Backend** → `http://localhost:8000`
+- **MCP Server** → `http://localhost:9001`
+- **Test** (se ejecuta y termina)
 
-```bash
-# Terminal 1 — Backend
-cd backend
-python -m uvicorn main:app --reload --port 8000
+### 5. Cargar la extensión en Chrome
 
-# Terminal 2 — MCP Server
-cd mcp-server
-python -m uvicorn main:app --reload --port 9000
-```
-
-### 6. Cargar Extensión en Chrome
-
-1. Abrir `chrome://extensions`
-2. Toggle **Developer mode** (arriba a la derecha)
+1. Abrí `chrome://extensions`
+2. Activá **Developer mode**
 3. Click **Load unpacked**
-4. Seleccionar la carpeta `extension/`
+4. Seleccioná la carpeta `extension/`
 
----
+### 6. Usar
 
-## Docker Setup (Alternativo)
-
-Si no tenés Python instalado, podés ejecutar todo con Docker.
-
-### 1. Crear archivo `.env`
-
-```bash
-# Copiar el template
-cp backend/.env.docker .env
-
-# Editar con tus credenciales (ver sección "Setup Rápido")
-# GOOGLE_CLIENT_ID=...
-# GEMINI_API_KEY=...
-# etc.
 ```
-
-### 2. Construir y ejecutar
-
-```bash
-# Construir imágenes y ejecutar contenedores
-docker-compose up --build
-
-# O en background (detached)
-docker-compose up -d --build
-```
-
-### 3. Ver logs
-
-```bash
-# Ver logs de todos los servicios
-docker-compose logs -f
-
-# Ver logs de un servicio específico
-docker-compose logs -f backend
-docker-compose logs -f mcp-server
-```
-
-### 4. Acceder a los servicios
-
-- **Backend**: http://localhost:8000
-- **MCP Server**: http://localhost:9000
-- **Health Check**: http://localhost:8000/health
-
-### 5. Detener
-
-```bash
-# Detener contenedores
-docker-compose down
-
-# Detener y eliminar volúmenes
-docker-compose down -v
-```
-
-### Notas
-
-- El backend sirve `extension/auth-callback.html` en la ruta `/auth-callback.html`
-- La extensión Chrome debe apuntar a `http://localhost:8000` (no `localhost:3000`)
-- Si necesitás recargar el código, hacé `docker-compose up --build` de nuevo
-
----
-
-## Flujo de Autenticación
-
-1. Usuario clickea "Conectar con Gmail" en el popup
-2. La extensión genera PKCE verifier+challenge
-3. Backend devuelve la URL de Google OAuth
-4. Se abre popup de Google (con PKCE params)
-5. Usuario acepta permisos
-6. Google redirige a `auth-callback.html` (en la extensión)
-7. El callback guarda el código de autorización en `chrome.storage.local`
-8. El popup detecta el código y lo envía al backend
-9. Backend intercambia código por tokens y guarda sesión en cookie
-10. Extensión muestra emails
-
----
-
-## Endpoints
-
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/health` | Health check |
-| GET | `/auth/gmail/login` | Inicia OAuth, devuelve URL + session_id |
-| POST | `/auth/gmail/callback` | Intercambia código por tokens |
-| GET | `/auth/gmail/status` | Estado de autenticación |
-| GET | `/api/emails` | Lista de emails (requiere auth) |
-| GET | `/api/emails/{id}` | Detalle de un email (requiere auth) |
-| POST | `/api/analyze` | Analiza un email con Gemini |
-| GET | `/api/dashboard/stats` | Estadísticas del sistema |
-| GET | `/api/dashboard/history` | Historial de análisis |
-| GET | `/dashboard` | Dashboard web |
-
----
-
-## Verbos de Prueba
-
-### Con curl (después de obtener tokens)
-
-```bash
-# Login
-curl -X GET "http://localhost:8000/auth/gmail/login" -c cookies.txt
-
-# Ver estado
-curl -X GET "http://localhost:8000/auth/gmail/status" -b cookies.txt
-
-# Analizar un email (ejemplo)
-curl -X POST "http://localhost:8000/api/analyze" \
-  -H "Content-Type: application/json" \
-  -H "X-Session-ID: your-session-id" \
-  -d '{
-    "email_id": "test123",
-    "email_subject": "Verify your account",
-    "email_sender": "support@paypa1-secure.com",
-    "email_body": "Click here immediately to verify: https://paypa1-secure.com/verify"
-  }'
-
-# Dashboard
-curl "http://localhost:8000/api/dashboard/stats"
+1. Click en el icono de IA-Shield en la barra de Chrome
+2. Click "Conectar con Gmail" → te redirige a Google
+3. Aceptá los permisos de lectura de Gmail
+4. Volvé a la extensión → los emails se cargan solos
+5. Los emails nuevos se analizan automáticamente cada 60s
 ```
 
 ---
 
-## Estructura de Archivos
+## 🤖 ¿Qué está automatizado?
+
+| Funcionalidad | Automático | Descripción |
+|---------------|-----------|-------------|
+| **Análisis de emails** | ✅ | Cada 60s via `chrome.alarms`, más al cargar la extensión |
+| **Detección de phishing** | ✅ | Gemini + reglas locales, sin intervención del usuario |
+| **Verificación de URLs** | ✅ | MCP Server via Safe Browsing API |
+| **Homoglyphs** | ✅ | Detección automática en todas las URLs extraídas |
+| **Notificaciones** | ✅ | Push de Chrome si detecta phishing con confianza > 80% |
+| **Badge update** | ✅ | El icono muestra el número de amenazas detectadas |
+| **Token refresh** | ✅ | Si el token expira, se refresca automáticamente |
+| **Rate limiting** | ✅ | 10 requests/min para proteger el backend y cuota de Gemini |
+| **Encriptación** | ✅ | Tokens se encriptan al volver a la extensión |
+| **Fallback sin Gemini** | ✅ | Si Gemini falla, usa reglas heurísticas locales |
+
+---
+
+## 📁 Estructura del proyecto
 
 ```
-ia-seguridad/
-├── backend/
-│   ├── main.py              # FastAPI app
-│   ├── config.py            # Configuración desde .env
+ia-shield/
+├── backend/                          # FastAPI backend
+│   ├── main.py                       # App + middlewares
+│   ├── config.py                     # Settings desde .env
 │   ├── requirements.txt
 │   ├── routes/
-│   │   ├── auth.py          # OAuth endpoints
-│   │   ├── emails.py        # Gmail API endpoints
-│   │   ├── analyze.py       # Análisis con Gemini + MCP
-│   │   └── dashboard.py     # Estadísticas
+│   │   ├── auth.py                   # OAuth PKCE + sesiones
+│   │   ├── analyze.py                # Análisis con Gemini
+│   │   ├── emails.py                 # Endpoints Gmail API
+│   │   └── dashboard.py              # Stats + history
 │   ├── services/
-│   │   ├── oauth_service.py # PKCE + OAuth logic
-│   │   ├── gmail_service.py # Gmail API client
-│   │   └── gemini_service.py# Gemini AI integration
+│   │   ├── oauth_service.py          # OAuth + token exchange
+│   │   ├── gmail_service.py          # Gmail API client
+│   │   ├── gemini_service.py         # Gemini prompt + analysis
+│   │   ├── encryption.py             # AES-256-GCM (Fernet)
+│   │   └── homoglyph.py              # Levenshtein detection
+│   ├── middleware/
+│   │   ├── cors_validation.py        # Extension ID validation
+│   │   └── rate_limiter.py           # slowapi 10/min
 │   ├── models/
-│   │   └── schemas.py       # Pydantic models
-│   └── static/
-│       └── dashboard.html   # Dashboard web
+│   │   └── schemas.py                # Pydantic models
+│   └── tests/                        # pytest suite (14 tests)
+│       ├── test_encryption.py
+│       ├── test_auth.py
+│       ├── test_analyze.py
+│       └── test_rate_limit.py
 │
-├── mcp-server/
-│   ├── main.py              # MCP server (JSON-RPC over HTTP)
-│   ├── config.py
-│   ├── requirements.txt
-│   └── tools/
-│       └── safebrowsing.py  # Google Safe Browsing API
-│
-├── extension/
-│   ├── manifest.json         # Chrome Extension MV3
-│   ├── service-worker.js     # Background service worker
-│   ├── auth-callback.html    # OAuth callback page
+├── extension/                        # Chrome Extension MV3
+│   ├── manifest.json                 # Permisos declarativeNetRequest
+│   ├── service-worker.js             # Polling + notificaciones
+│   ├── blocked.html                  # Página de bloqueo con reportar
 │   ├── popup/
 │   │   ├── popup.html
 │   │   ├── popup.css
 │   │   └── popup.js
 │   └── icons/
-│       └── README.md        # Necesitás agregar iconos PNG
 │
-├── .env.example             # Template de variables
-└── README.md
+├── mcp-server/                       # MCP (JSON-RPC over HTTP)
+│   ├── main.py                       # MCP server
+│   ├── config.py
+│   ├── requirements.txt
+│   └── tools/
+│       └── safebrowsing.py           # Safe Browsing API
+│
+├── docker-compose.yml
+├── Dockerfile.backend
+├── Dockerfile.mcp
+└── .env                              # Variables de entorno
 ```
 
 ---
 
-## Limitaciones del Prototipo
+## 🧪 Tests
 
-- **Facebook/Instagram**: No implementado (auth approval tarda semanas)
-- **Almacenamiento en memoria**: Sesiones se pierden al reiniciar el servidor
-- **URL blocking**: Solo funciona para links en emails analizados (no intercepta navegación general)
-- **Iconos**: Falta agregar archivos PNG reales en `extension/icons/`
+```bash
+# Correr tests del backend
+docker compose exec backend pytest tests/ -v
+
+# Resultado esperado: 13 passed, 2 xfailed
+# (2 xfailed = tests de auth que requieren implementación futura)
+```
 
 ---
 
-## Troubleshooting
+## 📊 Endpoints de la API
 
-### "401 Unauthorized" en emails
-- Verificar que la cookie `session_id` esté presente
-- Verificar que el token no haya expirado (1 hora por defecto)
-- Ir a la extensión y hacer logout + login de nuevo
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `GET` | `/health` | Health check |
+| `GET` | `/auth/gmail/login` | Inicia OAuth PKCE |
+| `GET` | `/auth/gmail/callback` | Callback OAuth |
+| `GET` | `/auth/session/{id}` | Verificar sesión |
+| `POST` | `/analyze` | Analizar email (rate limited: 10/min) |
+| `GET` | `/emails` | Listar emails |
+| `GET` | `/api/dashboard/stats` | Estadísticas |
+| `GET` | `/api/dashboard/history` | Historial de análisis |
+| `POST` | `/api/dashboard/false-positive` | Reportar falso positivo |
+| `GET` | `/docs` | Swagger UI |
 
-### "Failed to get emails list"
-- Verificar que la Gmail API esté habilitada en GCP
-- Verificar que el token tenga el scope `gmail.readonly`
+---
 
-### Gemini no responde
-- Verificar `GEMINI_API_KEY` en `.env`
-- Verificar que el plan tenga cuota disponible (Gemini 1.5 Flash: 1.5M tokens/min)
+## ⚠️ A mejorar (futuro)
 
-### Safe Browsing siempre dice "no maliciosa"
-- Es normal si la URL no está en listas negras de Google
-- Configurar `SAFE_BROWSING_API_KEY` para activación real
+- [ ] Autenticación en `/analyze` (actualmente no checkea session)
+- [ ] Redis para rate limiting en producción
+- [ ] HTTPS vía reverse proxy (nginx)
+- [ ] Soporte para Outlook/Yahoo
+- [ ] Dashboard con exportación CSV y gráficas
+- [ ] Sincronización multi-dispositivo

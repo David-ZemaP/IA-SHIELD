@@ -178,6 +178,15 @@ async function refreshEmails() {
 
         lastAnalysisResults[email.id] = result;
         analysisResults.push({ id: email.id, verdict: result.verdict });
+        
+        // Enviar notificación si es phishing de alta confianza
+        sendPhishingNotification({
+          email_id: email.id,
+          email_subject: email.subject,
+          email_sender: email.from,
+          verdict: result.verdict,
+          confidence: result.confidence
+        });
 
         // Persist results to storage
         try {
@@ -257,6 +266,29 @@ async function fetchEmails(sessionId) {
   } catch (e) {
     console.error('[IA-Seg] fetchEmails exception:', e.message);
     throw e;
+  }
+}
+
+/**
+ * Enviar notificación cuando se detecta phishing de alta confianza
+ **/
+async function sendPhishingNotification(email) {
+  if (email.verdict === "phishing" && email.confidence > 0.8) {
+    try {
+      // Extraer email del sender para la notificación
+      const senderMatch = email.email_sender?.match(/<(.+?)>/) || [null, email.email_sender];
+      const senderEmail = senderMatch[1] || email.email_sender || "desconocido";
+      
+      await chrome.notifications.create({
+        type: "basic",
+        iconUrl: "icons/icon-128.png",
+        title: "🚨 Phishing detectado",
+        message: `Email suspicious de: ${senderEmail}\nAsunto: ${email.email_subject?.substring(0, 50)}...`,
+        priority: 1
+      });
+    } catch (e) {
+      console.log("[IA-Seg] Notification error:", e.message);
+    }
   }
 }
 

@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
 
+    # Security
+    ALLOWED_EXTENSION_IDS: str = ""  # Comma-separated Chrome Extension IDs
+    TOKEN_ENCRYPTION_KEY: str = ""  # Base64 key for token encryption
+
     # In-memory token storage (prototype)
     class Config:
         env_file = ".env"

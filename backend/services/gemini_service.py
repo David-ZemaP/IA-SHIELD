@@ -8,6 +8,8 @@ import os
 import re
 from typing import Optional
 
+from .homoglyph import detect_homoglyph, check_url_homoglyphs
+
 # Config
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
@@ -176,6 +178,13 @@ def analyze_email(email_content: str, sender: str = "", subject: str = "") -> di
         r = check_url_safety(url)
         url_results.append(r)
         url_red_flags.extend(r["red_flags"])
+
+    # Detectar homoglyphs en todas las URLs
+    homoglyph_results = check_url_homoglyphs(urls[:20])
+    homoglyph_warnings = homoglyph_results.get("high_risk", [])
+
+    for hg in homoglyph_warnings:
+        red_flags.append(f"Homoglyph: {hg['warning']}")
 
     # Build prompt for Gemini
     prompt = f"""ANALIZA ESTE EMAIL:
