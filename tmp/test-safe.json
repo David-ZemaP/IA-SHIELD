@@ -1,0 +1,7 @@
+{
+  "email_id": "test-safe-001",
+  "email_subject": "Re: Documentación del proyecto",
+  "email_sender": "juan@empresa.com",
+  "email_body": "Te envío la documentación del proyecto que me pediste. Adjunto encontrarás el archivo PDF.",
+  "check_urls": true
+}

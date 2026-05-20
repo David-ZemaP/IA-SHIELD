@@ -8,7 +8,9 @@
     "storage",
     "alarms",
     "notifications",
-    "scripting"
+    "scripting",
+    "declarativeNetRequest",
+    "webNavigation"
   ],
   "host_permissions": [
     "http://localhost:8000/*",

@@ -1,0 +1,7 @@
+{
+  "email_id": "test-phishing-001",
+  "email_subject": "URGENTE: Tu cuenta de banco ha sido bloqueda",
+  "email_sender": "soporte@banc0-seguro.xyz",
+  "email_body": "Hemos detectado actividad sospechosa en su cuenta bancaria. Su cuenta ha sido temporalmente bloqueada. Para desbloquear su cuenta, haga clic en el enlace siguiente: https://banc0-seguro.xyz/login/verify?user=12345",
+  "check_urls": true
+}

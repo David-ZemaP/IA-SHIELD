@@ -10,6 +10,7 @@ import pathlib
 from routes import auth, analyze
 from routes.emails import router as emails_router
 from routes.dashboard import router as dashboard_router
+from routes.mcp import router as mcp_router
 
 # Configure logging
 logging.basicConfig(level=logging.WARNING, format='%(message)s')
@@ -44,6 +45,7 @@ app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(emails_router, prefix="/emails", tags=["emails"])
 app.include_router(analyze.router, prefix="/analyze", tags=["analyze"])
 app.include_router(dashboard_router, prefix="/api/dashboard", tags=["dashboard"])
+app.include_router(mcp_router, prefix="/mcp", tags=["mcp"])
 
 # Mount static files for dashboard
 app.mount("/dashboard", StaticFiles(directory="static", html=True), name="dashboard")

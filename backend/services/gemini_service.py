@@ -1,5 +1,5 @@
 """
-Servicio de análisis de phishing usando Gemini 2.5 Flash.
+Servicio de análisis de phishing usando Gemini 1.5 Flash.
 Detecta en tiempo real intentos de phishing con IA.
 """
 import httpx
@@ -15,7 +15,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 # Phishing patterns (local fallback si Gemini falla)
 SUSPICIOUS_TLDS = ['.xyz', '.tk', '.ml', '.ga', '.cf', '.gq', '.buzz', '.top', '.icu', '.pw', '.cc']
 SUSPICIOUS_HOSTING = [
-    '000webhostapp.com', 'bit.ly', 'tinyurl.com', 'goo.gl', 't.co',
+    '000webhostapp.com', 'bit.ly', 'tinyurl.com', 'goo.gl',
     'is.gd', 'buff.ly', 'rebrand.ly', 'cutt.ly', '000webhost.com'
 ]
 IMPERSONATED_BRANDS = [
@@ -32,6 +32,17 @@ SAFE_DOMAINS = [
     'instagram.com', 'twitter.com', 'linkedin.com',
     'netflix.com', 'spotify.com', 'dropbox.com',
     'github.com', 'gitlab.com', 'bitbucket.org',
+    'pinterest.com', 't.co'  # t.co es de Twitter/X, no malicioso
+]
+
+# Keywords sospechosos
+SUSPICIOUS_KEYWORDS = [
+    'urgente', 'inmediatamente', 'actuar ya', 'cuenta suspendida',
+    'verificar', 'confirmar datos', 'password', 'contraseña',
+    'actualizar datos', 'datos personales', 'banco', 'tarjeta',
+    'premio', 'ganador', 'loteria', 'regalo', 'gratis',
+    'iniciar sesión', 'login', 'sign in', 'cliente',
+    'soporte', 'help desk', 'seguridad', 'alerta'
 ]
 
 
@@ -50,6 +61,10 @@ def check_url_safety(url: str) -> dict:
     red_flags = []
     is_suspicious = False
 
+    # Si el dominio es conocido y seguro, no analizar más
+    if any(safe in domain for safe in SAFE_DOMAINS):
+        return {"url": url, "domain": domain, "suspicious": False, "red_flags": []}
+
     for tld in SUSPICIOUS_TLDS:
         if domain.endswith(tld):
             red_flags.append(f"TLD sospechoso: {tld}")
@@ -62,7 +77,7 @@ def check_url_safety(url: str) -> dict:
 
     for brand in IMPERSONATED_BRANDS:
         if brand in domain and not any(safe in domain for safe in SAFE_DOMAINS):
-            red_flags.append(f"Posible suplantación de marca: '{brand}'")
+            red_flags.append(f"Posible suplantación de marca: {brand}")
             is_suspicious = True
 
     if re.match(r'https?://\d+\.\d+\.\d+\.\d+', url):
@@ -76,42 +91,29 @@ def check_url_safety(url: str) -> dict:
     return {"url": url, "domain": domain, "suspicious": is_suspicious, "red_flags": red_flags}
 
 
-SYSTEM_PROMPT = """Eres un experto en ciberseguridad. Analiza este email y determina si es un intento de phishing.
+SYSTEM_PROMPT = """Eres un detector de phishing. Analiza este email.
 
-RESPUESTA OBLIGATORIA: JSON puro sin markdown, sin código, sin explicaciones adicionales.
-{
-  "verdict": "safe|suspicious|phishing|review_needed",
-  "confidence": 0.0 a 1.0,
-  "reason": "breve explicación en español",
-  "indicators": ["indicador 1", "indicador 2"]
-}
+RESPONDE SOLO CON ESTE JSON EXACTO (sin texto antes ni después):
+{"verdict":"safe","confidence":0.0,"reason":"texto","indicators":[]}
 
-INDICADORES DE PHISHING:
-- Remitente con dominio que no corresponde a la empresa declarada
-- Urgencia: "actúa ahora", "cuenta suspendida", "verificar inmediatamente"
-- URLs con hosting gratuito (.tk, .xyz, .000webhostapp.com, bit.ly)
-- Dominios que suplantan marcas conocidas (secure-paypal.xyz, login-amazon.net)
-- Errores ortográficos o gramática sospechosa
-- Solicitud de contraseñas, datos personales, financieros
-- Ofertas demasiado buenas para ser verdad
-- URLs con direcciones IP en vez de dominio
-
-Si no hay indicadores claros → verdict: "safe"
-Si hay dudas → verdict: "review_needed"
-Si es claramente phishing → verdict: "phishing"
+verdict: safe|suspicious|phishing
+confidence: 0.0 a 1.0
+reason: una frase breve
+indicators: hasta 3 palabras clave
 """
 
 
 def call_gemini(prompt: str) -> Optional[dict]:
     """Llama a Gemini y retorna el JSON parseado o None si falla."""
     if not GEMINI_API_KEY:
+        print("[Gemini] No API Key configurada")
         return None
 
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
             "temperature": 0.1,
-            "maxOutputTokens": 512  # Respuesta corta, JSON puro
+            "maxOutputTokens": 512
         }
     }
 
@@ -123,24 +125,31 @@ def call_gemini(prompt: str) -> Optional[dict]:
         )
 
         if response.status_code != 200:
+            print(f"[Gemini] Error HTTP {response.status_code}")
             return None
 
         data = response.json()
         if "candidates" not in data or not data["candidates"]:
+            print("[Gemini] No candidates en respuesta")
             return None
 
         text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-        # Strip markdown code blocks
         text = re.sub(r'^```json\s*', '', text)
         text = re.sub(r'^```\s*', '', text)
         text = re.sub(r'\s*```$', '', text)
         text = text.strip()
 
-        json_match = re.search(r'\{.*\}', text, re.DOTALL)
+        # Try to find JSON - handle partial responses
+        json_match = re.search(r'\{[\s\S]*\}', text)
         if not json_match:
+            print(f"[Gemini] No se encontró JSON. Respuesta: {text[:200]}")
             return None
 
-        result = json.loads(json_match.group())
+        try:
+            result = json.loads(json_match.group())
+        except json.JSONDecodeError as e:
+            print(f"[Gemini] JSON decode error: {e}. Respuesta: {text[:200]}")
+            return None
         return {
             "verdict": result.get("verdict", "review_needed"),
             "confidence": float(result.get("confidence", 0.5)),
@@ -148,18 +157,18 @@ def call_gemini(prompt: str) -> Optional[dict]:
             "indicators": result.get("indicators", [])
         }
 
-    except Exception:
+    except Exception as e:
+        print(f"[Gemini] Exception: {e}")
         return None
 
 
 def analyze_email(email_content: str, sender: str = "", subject: str = "") -> dict:
     """
-    Analiza email para phishing con IA en tiempo real.
-    1. Intenta Gemini para análisis contextual profundo
+    Analiza email para phishing con IA.
+    1. Intenta Gemini para análisis contextual
     2. Si falla, usa análisis por reglas local
-    3. Combina indicadores de URLs
     """
-    urls = extract_urls(email_content)
+    urls = extract_urls(email_content or "")
     url_results = []
     url_red_flags = []
 
@@ -173,13 +182,12 @@ def analyze_email(email_content: str, sender: str = "", subject: str = "") -> di
 
 DE: {sender if sender else 'Desconocido'}
 ASUNTO: {subject if subject else 'Sin asunto'}
-CONTENIDO: {email_content[:6000] if email_content else '(vacío)'}
+CONTENIDO: {email_content[:6000] if email_content else '(vacio)'}
 URLs: {', '.join(urls[:10]) if urls else 'Ninguna'}
 
 Responde solo JSON."""
 
-
-    # Try Gemini first
+    # Try Gemini
     gemini_result = call_gemini(SYSTEM_PROMPT + "\n\n" + prompt)
 
     if gemini_result:
@@ -188,7 +196,7 @@ Responde solo JSON."""
         reason = gemini_result["reason"]
         indicators = gemini_result["indicators"]
     else:
-        # Fallback: rule-based analysis
+        # Fallback: rule-based
         red_flag_count = len(url_red_flags)
 
         if red_flag_count >= 3:
@@ -200,16 +208,15 @@ Responde solo JSON."""
         else:
             verdict = "safe"
             confidence = 0.6
+            reason = "No se detectaron indicadores obvios de phishing"
             if urls:
-                reason = f"No se detectaron indicadores obvios — {len(urls)} enlace(s) sin patrones sospechosos"
-            else:
-                reason = "No se detectaron indicadores de phishing"
+                reason += f" - {len(urls)} enlace(s) sin patrones sospechosos"
 
         if not gemini_result:
-            reason = reason or "Análisis local: sin indicadores obvios de phishing"
+            reason = reason or "Analisis local: sin indicadores obvios de phishing"
             indicators = url_red_flags[:10]
 
-    # Override si hay URLs maliciosas detectadas localmente
+    # Override si hay URLs maliciosas
     if url_red_flags and verdict == "safe":
         verdict = "suspicious"
         confidence = min(0.7, confidence)
@@ -221,83 +228,6 @@ Responde solo JSON."""
         "confidence": confidence,
         "reason": reason,
         "indicators": list(dict.fromkeys(indicators[:10])),
-        "urls_analyzed": url_results,
-        "urls_count": len(urls)
-    }
-
-
-def analyze_email(email_content: str, sender: str = "", subject: str = "") -> dict:
-    """
-    Analiza email para phishing de forma simple.
-    1. Extrae URLs
-    2. Verifica patrones sospechosos
-    3. Usa Gemini SOLO si hay contenido ambiguo
-    """
-    if not email_content and not subject:
-        return {
-            "verdict": "review_needed",
-            "confidence": 0.0,
-            "reason": "Email sin contenido para analizar",
-            "indicators": []
-        }
-
-    urls = extract_urls(email_content)
-    all_red_flags = []
-    url_results = []
-
-    # Check each URL
-    for url in urls[:20]:  # Max 20 URLs
-        result = check_url_safety(url)
-        url_results.append(result)
-        if result["red_flags"]:
-            all_red_flags.extend(result["red_flags"])
-
-    # Check sender email
-    sender_domain = ''
-    if '@' in sender:
-        sender_domain = sender.split('@')[1].lower()
-        if sender_domain:
-            if any(tld in sender_domain for tld in SUSPICIOUS_TLDS):
-                all_red_flags.append(f"Remitente con dominio sospechoso: {sender_domain}")
-            if not any(safe in sender_domain for safe in SAFE_DOMAINS):
-                for kw in SUSPICIOUS_KEYWORDS[:5]:
-                    if kw in email_content.lower() or kw in subject.lower():
-                        all_red_flags.append(f"Palabra sospechosa en email: '{kw}'")
-                        break
-
-    # Check for suspicious keywords in subject
-    for kw in SUSPICIOUS_KEYWORDS:
-        if kw.lower() in subject.lower():
-            all_red_flags.append(f"Asunto sospechoso: '{kw}'")
-            break
-
-    # Count suspicious patterns
-    red_flag_count = len(all_red_flags)
-
-    # Determine verdict
-    if red_flag_count >= 3:
-        verdict = "phishing"
-        confidence = min(0.95, 0.6 + red_flag_count * 0.1)
-        reason = f"Se detectaron {red_flag_count} indicadores de phishing"
-    elif red_flag_count >= 1:
-        verdict = "suspicious"
-        confidence = min(0.8, 0.4 + red_flag_count * 0.15)
-        reason = f"Se detectaron {red_flag_count} indicadores sospechosos — revisar manualmente"
-    else:
-        verdict = "safe"
-        confidence = 0.7
-        reason = "No se detectaron indicadores obvios de phishing"
-        if urls:
-            reason += f" — {len(urls)} enlace(s) encontrado(s) sin patrones sospechosos"
-
-    # Deduplicate flags
-    unique_flags = list(dict.fromkeys(all_red_flags))
-
-    return {
-        "verdict": verdict,
-        "confidence": confidence,
-        "reason": reason,
-        "indicators": unique_flags[:10],  # Max 10 indicators
         "urls_analyzed": url_results,
         "urls_count": len(urls)
     }

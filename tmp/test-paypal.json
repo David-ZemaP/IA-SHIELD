@@ -1,0 +1,7 @@
+{
+  "email_id": "test-paypal-fake-001",
+  "email_subject": "Alerta de seguridad: Tu cuenta PayPal necesita verificación",
+  "email_sender": "security@paypa1-verification.com",
+  "email_body": "Hola, hemos detectado un intento de acceso no autorizado a tu cuenta PayPal. Por tu seguridad, hemos temporariamente limitado tu cuenta. Para restaurar el acceso completo, verifica tu identidad haciendo clic en el siguiente enlace: https://paypa1-secure-login.net/verify Tu cuenta será suspendida permanentemente si no actúas en las próximas 24 horas. PayPal Security Team",
+  "check_urls": true
+}

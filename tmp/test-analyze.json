@@ -1,0 +1,7 @@
+{
+  "email_id": "test-123",
+  "email_subject": "URGENTE: Tu cuenta ha sido suspendida",
+  "email_sender": "soporte@paypal-security.xyz",
+  "email_body": "Hola, hemos detectado actividad sospechosa en tu cuenta. Por favor verifica tu identidad inmediatamente haciendo clic en el siguiente enlace: https://paypal-secure-login.com/verify Tu cuenta será suspendida si no actúas en las próximas 24 horas.",
+  "check_urls": true
+}

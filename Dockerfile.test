@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install requests
+RUN pip install --no-cache-dir requests
+
+# Copy test script
+COPY test-phishing.py .
+
+# Default command runs the test
+CMD ["python", "test-phishing.py"]
