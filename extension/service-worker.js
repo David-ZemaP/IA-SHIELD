@@ -180,7 +180,7 @@ async function refreshEmails() {
         analysisResults.push({ id: email.id, verdict: result.verdict });
         
         // Enviar notificación si es phishing de alta confianza
-        sendPhishingNotification({
+        await sendPhishingNotification({
           email_id: email.id,
           email_subject: email.subject,
           email_sender: email.from,
@@ -281,7 +281,7 @@ async function sendPhishingNotification(email) {
       
       await chrome.notifications.create({
         type: "basic",
-        iconUrl: "icons/icon-128.png",
+        iconUrl: chrome.runtime.getURL("icons/icon-128.png"),
         title: "🚨 Phishing detectado",
         message: `Email suspicious de: ${senderEmail}\nAsunto: ${email.email_subject?.substring(0, 50)}...`,
         priority: 1

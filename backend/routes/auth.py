@@ -31,8 +31,9 @@ async def gmail_login(request: Request, response: Response):
     # Generate PKCE pair
     code_verifier, code_challenge = oauth_service.generate_pkce_pair()
 
-    # Generate state
-    state = secrets.token_urlsafe(32)
+    # Encode session_id inside state so Google returns it in the callback
+    # Format: "ias:{session_id}:{random}"
+    state = f"ias:{session_id}:{secrets.token_urlsafe(16)}"
 
     # Store PKCE data
     pkce_store[session_id] = {
@@ -72,15 +73,21 @@ async def gmail_callback(
     Exchange authorization code for tokens.
     Extension flow: receives session_id via query param (no cookie in popup context).
     """
-    # Get session ID: from query param (extension) or cookie (web browser fallback)
-    sid = session_id or request.cookies.get("session_id")
+    # Extract session ID: from encoded state (primary), query param, or cookie (fallback)
+    sid = None
+    if state and state.startswith("ias:"):
+        parts = state.split(":", 2)
+        if len(parts) >= 2:
+            sid = parts[1]
+    if not sid:
+        sid = session_id or request.cookies.get("session_id")
 
     if not sid or sid not in pkce_store:
         raise HTTPException(status_code=400, detail="Sesión inválida o expirada")
 
     pkce_data = pkce_store[sid]
 
-    # Verify state
+    # Verify state (full match, not just session_id)
     if state != pkce_data.get("state"):
         raise HTTPException(status_code=400, detail="State mismatch — posible ataque CSRF")
 

@@ -2,19 +2,85 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>IA-Seg — Login</title>
+  <title>IA-Shield — Login</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; text-align: center; padding: 40px; background: #1a1a2e; color: white; }
     .success { color: #28a745; font-size: 22px; margin: 20px 0; }
+    .error { color: #dc3545; font-size: 18px; margin: 20px 0; }
     .info { color: #aaa; font-size: 14px; line-height: 1.6; max-width: 350px; margin: 0 auto; }
+    .loading { color: #ffc107; font-size: 18px; margin: 20px 0; }
+    .email { color: #667eea; font-size: 14px; margin: 10px 0; }
     .close-btn { background: #667eea; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 14px; margin-top: 24px; }
     .close-btn:hover { background: #5a6fd6; }
+    .retry-btn { background: transparent; color: #667eea; border: 1px solid #667eea; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 14px; margin-top: 12px; margin-left: 8px; }
+    .retry-btn:hover { background: rgba(102,126,234,0.1); }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
-  <h2>🛡️ IA-Seguridad</h2>
-  <div class="success">✅ ¡Sesión establecida!</div>
-  <p class="info">Cerrá esta ventana y hacé click nuevamente en el ícono de la extensión para ver tus emails.</p>
-  <button class="close-btn" onclick="window.close()">Cerrar esta ventana</button>
+  <h2>🛡️ IA-Shield</h2>
+  <div id="statusLoading" class="loading">⏳ Verificando sesión...</div>
+  <div id="statusSuccess" class="success hidden">✅ ¡Sesión establecida!</div>
+  <div id="statusError" class="error hidden">❌ Error al establecer sesión</div>
+  <div id="emailDisplay" class="email hidden"></div>
+  <p id="infoText" class="info hidden">Cerrá esta ventana y hacé click nuevamente en el ícono de la extensión para ver tus emails.</p>
+  <button id="closeBtn" class="close-btn hidden" onclick="window.close()">Cerrar esta ventana</button>
+  <button id="retryBtn" class="retry-btn hidden" onclick="window.close()">Cerrar e intentar de nuevo</button>
+
+  <script>
+    const API_BASE = 'http://localhost:8000';
+
+    (async function() {
+      const params = new URLSearchParams(window.location.search);
+      const sessionId = params.get('sessionId');
+      const email = params.get('email');
+
+      if (!sessionId) {
+        document.getElementById('statusLoading').className = 'hidden';
+        document.getElementById('statusError').className = 'error';
+        document.getElementById('statusError').textContent = '❌ No se recibió el identificador de sesión';
+        document.getElementById('retryBtn').className = 'retry-btn';
+        return;
+      }
+
+      // Verificar que la sesión es válida en el backend
+      try {
+        const resp = await fetch(`${API_BASE}/auth/session/${sessionId}`);
+        const data = await resp.json();
+
+        document.getElementById('statusLoading').className = 'hidden';
+
+        if (data.valid) {
+          document.getElementById('statusSuccess').className = 'success';
+          document.getElementById('emailDisplay').className = 'email';
+          document.getElementById('emailDisplay').textContent = email ? `📧 ${email}` : '';
+          document.getElementById('infoText').className = 'info';
+          document.getElementById('closeBtn').className = 'close-btn';
+
+          // Intentar guardar en chrome.storage (solo funciona si estamos en contexto extensión)
+          try {
+            if (typeof chrome !== 'undefined' && chrome.storage) {
+              await chrome.storage.local.set({
+                ia_seguridad_session: { sessionId: sessionId, email: email || '' }
+              });
+              console.log('[IA-Shield] Sesión guardada en chrome.storage desde callback');
+            }
+          } catch(e) {
+            // No estamos en contexto extensión, el popup ya guardó el sessionId
+            console.log('[IA-Shield] No se pudo acceder a chrome.storage (normal, estamos en web)');
+          }
+        } else {
+          document.getElementById('statusError').className = 'error';
+          document.getElementById('statusError').textContent = '❌ La sesión expiró o no es válida. Cerra e intentá de nuevo.';
+          document.getElementById('retryBtn').className = 'retry-btn';
+        }
+      } catch (e) {
+        document.getElementById('statusLoading').className = 'hidden';
+        document.getElementById('statusError').className = 'error';
+        document.getElementById('statusError').textContent = '❌ Error de conexión con el servidor';
+        document.getElementById('retryBtn').className = 'retry-btn';
+      }
+    })();
+  </script>
 </body>
 </html>

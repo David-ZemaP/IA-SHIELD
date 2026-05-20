@@ -52,7 +52,9 @@
             return;
           }
         }
-      } catch(e) {}
+      } catch(e) {
+        console.error('[IA-Shield] Error verificando sesión:', e.message);
+      }
 
       // Session invalid/expired — clear it
       await chrome.storage.local.remove('ia_seguridad_session');
