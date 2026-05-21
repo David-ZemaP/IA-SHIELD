@@ -13,6 +13,7 @@ from routes.dashboard import router as dashboard_router
 from routes.mcp import router as mcp_router
 from middleware.cors_validation import CORSValidationMiddleware
 from middleware.rate_limiter import limiter
+from storage import init_db, close_db
 
 # Configure logging
 logging.basicConfig(level=logging.WARNING, format='%(message)s')
@@ -23,7 +24,11 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 async def lifespan(app: FastAPI):
     # Startup — ensure directories exist
     os.makedirs("static", exist_ok=True)
+    # Initialize persistent storage (feature-gated, no-op if disabled)
+    init_db()
     yield
+    # Shutdown — close database connection
+    close_db()
 
 
 app = FastAPI(

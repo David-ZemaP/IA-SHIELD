@@ -28,7 +28,7 @@ setTimeout(() => {
 
 // Config
 const API_BASE = "http://localhost:8000";
-const POLL_INTERVAL_MS = 60 * 1000; // 60 segundos
+const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutos
 const SESSION_KEY = "ia_seguridad_session";
 
 // Badge colors
@@ -48,7 +48,7 @@ let lastAnalysisResults = {};
  */
 chrome.runtime.onInstalled.addListener(() => {
   console.log("[IA-Seg] Extensión instalada");
-  chrome.alarms.create("pollGmail", { periodInMinutes: 1 });
+      chrome.alarms.create("pollGmail", { periodInMinutes: 5 });
 });
 
 // También ejecutar cuando se rearranca el service worker (cada vez que se recarga)
@@ -61,7 +61,7 @@ chrome.runtime.onStartup.addListener(() => {
   // Crear alarm si no existe
   chrome.alarms.get("pollGmail", (alarm) => {
     if (!alarm) {
-      chrome.alarms.create("pollGmail", { periodInMinutes: 1 });
+  chrome.alarms.create("pollGmail", { periodInMinutes: 5 });
     }
   });
 });

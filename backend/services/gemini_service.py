@@ -99,7 +99,10 @@ RESPONDE SOLO CON ESTE JSON EXACTO (sin texto antes ni después):
 {"verdict":"safe","confidence":0.0,"reason":"texto","indicators":[]}
 
 verdict: safe|suspicious|phishing
-confidence: 0.0 a 1.0
+confidence: 0.0 a 1.0 — representa "qué tan confiable es este email":
+  - safe → 0.85 a 0.95 (email legítimo, confiable)
+  - suspicious → 0.40 a 0.70 (dudoso, no te confíes)
+  - phishing → 0.10 a 0.35 (peligroso, no confiar en absoluto)
 reason: una frase breve
 indicators: hasta 3 palabras clave
 """
@@ -210,25 +213,25 @@ Responde solo JSON."""
 
         if red_flag_count >= 3:
             verdict = "phishing"
-            confidence = min(0.95, 0.5 + red_flag_count * 0.15)
+            confidence = 0.20  # Highly dangerous
         elif red_flag_count >= 1:
             verdict = "suspicious"
-            confidence = min(0.8, 0.3 + red_flag_count * 0.2)
+            confidence = 0.50  # Moderate doubt
         else:
             verdict = "safe"
-            confidence = 0.6
-            reason = "No se detectaron indicadores obvios de phishing"
+            confidence = 0.92
+            reason = "No se detectaron indicadores de phishing"
             if urls:
-                reason += f" - {len(urls)} enlace(s) sin patrones sospechosos"
+                reason += f" — {len(urls)} enlace(s) verificados sin patrones sospechosos"
 
         if not gemini_result:
-            reason = reason or "Analisis local: sin indicadores obvios de phishing"
+            reason = reason or "Análisis local: sin indicadores de phishing"
             indicators = url_red_flags[:10]
 
     # Override si hay URLs maliciosas
     if url_red_flags and verdict == "safe":
         verdict = "suspicious"
-        confidence = min(0.7, confidence)
+        confidence = 0.55
         reason = reason or "Se detectaron patrones sospechosos en URLs"
         indicators = list(dict.fromkeys(indicators + url_red_flags[:5]))
 

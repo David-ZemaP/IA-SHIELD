@@ -13,6 +13,7 @@
   let pkceVerifier = null;
 
   // DOM elements
+  const loadingSection = document.getElementById('loadingSection');
   const loginSection = document.getElementById('loginSection');
   const mainSection = document.getElementById('mainSection');
   const errorSection = document.getElementById('errorSection');
@@ -33,6 +34,9 @@
   init();
 
   async function init() {
+    // Start with loading visible (no flash of login screen)
+    showLoadingSection();
+
     // Check ia_seguridad_session (saved after successful auth)
     const stored = await chrome.storage.local.get('ia_seguridad_session');
     const session = stored.ia_seguridad_session;
@@ -60,13 +64,23 @@
       await chrome.storage.local.remove('ia_seguridad_session');
     }
 
+    // No valid session — show login
     showLoginSection();
     loginBtn.addEventListener('click', handleLogin);
     logoutBtn.addEventListener('click', handleLogout);
     refreshBtn.addEventListener('click', loadEmails);
   }
 
+  function showLoadingSection() {
+    loadingSection.style.display = 'block';
+    loginSection.style.display = 'none';
+    mainSection.style.display = 'none';
+    errorSection.style.display = 'none';
+    userInfo.style.display = 'none';
+  }
+
   function showLoginSection() {
+    loadingSection.style.display = 'none';
     loginSection.style.display = 'block';
     mainSection.style.display = 'none';
     errorSection.style.display = 'none';
@@ -74,6 +88,7 @@
   }
 
   function showMainSection() {
+    loadingSection.style.display = 'none';
     loginSection.style.display = 'none';
     mainSection.style.display = 'block';
     errorSection.style.display = 'none';
@@ -81,6 +96,7 @@
   }
 
   function showError(msg) {
+    loadingSection.style.display = 'none';
     loginSection.style.display = 'none';
     mainSection.style.display = 'none';
     errorSection.style.display = 'block';
@@ -291,7 +307,9 @@
     emails = [];
     analysisResults = {};
     updateStats();
-    showLoginSection();
+    showLoadingSection();
+    // Brief delay to avoid flash, then show login
+    setTimeout(() => showLoginSection(), 200);
   }
 
   // Helpers

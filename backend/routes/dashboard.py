@@ -6,11 +6,17 @@ Endpoints:
 - POST /api/dashboard/false-positive → reportar falso positivo
 """
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timezone
 from collections import defaultdict
 import uuid
+import asyncio
+import csv
+import io
+
+from storage import write_analysis, write_false_positive
 
 router = APIRouter(tags=["dashboard"])
 
@@ -74,6 +80,48 @@ async def get_history(limit: int = 50):
         )[:limit]
     return {"items": items, "total": len(items)}
 
+
+@router.get("/export")
+async def export_history_csv():
+    """
+    Export analysis history as CSV download.
+    Uses in-memory data (no config gate — safe by nature).
+    """
+    with _history_lock:
+        items = sorted(
+            analysis_history.values(),
+            key=lambda x: x.get("analyzed_at", ""),
+            reverse=True
+        )
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "email_id", "verdict", "confidence", "reason",
+        "analyzed_at", "false_positive_reported", "indicators"
+    ])
+
+    for item in items:
+        writer.writerow([
+            item.get("email_id", ""),
+            item.get("verdict", ""),
+            item.get("confidence", 0),
+            item.get("reason", ""),
+            item.get("analyzed_at", ""),
+            item.get("false_positive_reported", False),
+            "; ".join(item.get("indicators", []))
+        ])
+
+    output.seek(0)
+
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=ia-shield-analysis-export.csv"
+        }
+    )
+
 @router.post("/false-positive")
 async def report_false_positive(report: FalsePositiveReport):
     """
@@ -93,6 +141,12 @@ async def report_false_positive(report: FalsePositiveReport):
             analysis_history[report.analysis_id]["verdict"] = "safe"
             analysis_history[report.analysis_id]["verdict_overridden"] = True
             analysis_history[report.analysis_id]["override_reason"] = "false_positive_reported"
+
+    # Dual-write to SQLite (non-blocking, after in-memory update)
+    try:
+        write_false_positive(report.analysis_id, report.reason)
+    except Exception:
+        pass  # Non-fatal
 
     return {"ok": True, "message": "Falso positivo registrado"}
 
@@ -127,5 +181,11 @@ def record_analysis(result: dict):
         urls = result.get("urls_analyzed", [])
         stats["total_urls_checked"] += len(urls)
         stats["total_malicious_urls"] += sum(1 for u in urls if u.get("malicious"))
+
+        # Dual-write to SQLite (non-blocking, after in-memory write)
+        try:
+            write_analysis(record)
+        except Exception:
+            pass  # Non-fatal: in-memory is primary, SQLite is secondary
 
         return analysis_id

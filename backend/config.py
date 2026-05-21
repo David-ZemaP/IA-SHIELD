@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSION_IDS: str = ""  # Comma-separated Chrome Extension IDs
     TOKEN_ENCRYPTION_KEY: str = ""  # Base64 key for token encryption
 
+    # Feature Flags (all default false — opt-in)
+    USE_PERSISTENT_STORAGE: bool = False
+    GEMINI_USE_V2: bool = False
+    USE_ANOMALY_DETECTION: bool = False
+    USE_RAG: bool = False
+    USE_BATCH_ANALYSIS: bool = False
+
     # In-memory token storage (prototype)
     class Config:
         env_file = ".env"

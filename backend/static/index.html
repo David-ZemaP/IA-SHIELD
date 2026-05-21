@@ -189,6 +189,19 @@
       cursor: pointer;
     }
 
+    .export-btn {
+      background: #28a745;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      margin-left: 8px;
+    }
+
+    .export-btn:hover { background: #218838; }
+
     .empty-state {
       text-align: center;
       padding: 40px;
@@ -278,7 +291,10 @@
     <div class="history-table-container">
       <div class="history-header">
         <h2>Historial de Análisis</h2>
-        <button class="refresh-btn" onclick="loadData()">↻ Actualizar</button>
+        <div>
+          <button class="export-btn" onclick="exportCSV()">📥 Exportar CSV</button>
+          <button class="refresh-btn" onclick="loadData()">↻ Actualizar</button>
+        </div>
       </div>
       <table class="history-table">
         <thead>
@@ -304,8 +320,8 @@
     async function loadData() {
       try {
         const [statsResp, historyResp] = await Promise.all([
-          fetch(`${API_BASE}/dashboard/stats`),
-          fetch(`${API_BASE}/dashboard/history?limit=50`)
+          fetch(`${API_BASE}/api/dashboard/stats`),
+          fetch(`${API_BASE}/api/dashboard/history?limit=50`)
         ]);
 
         const stats = await statsResp.json();
@@ -405,6 +421,10 @@
 
     function getShortLabel(v) {
       return {safe:'✓', suspicious:'⚠', phishing:'✕', review_needed:'?'}[v] || '?';
+    }
+
+    function exportCSV() {
+      window.open(`${API_BASE}/api/dashboard/export`, '_blank');
     }
 
     // Load on start and every 30 seconds
